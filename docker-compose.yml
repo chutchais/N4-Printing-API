@@ -1,0 +1,27 @@
+# docker-compose.yml
+
+version: '3.3'
+
+services:
+  tid-redis:
+    container_name: tid-redis
+    image: redis:5.0.6-alpine
+    volumes:
+      - redis_data:/data
+    ports:
+      - 6379:6379
+
+  tid-server:
+    build:
+      context: ./app
+    command: python app.py
+    container_name: tid-server
+    depends_on:
+      - tid-redis
+    environment:
+      - REDIS_URL=redis://tid-redis:6379/0
+    ports:
+      - 8013:5000
+
+volumes:  
+  redis_data:
