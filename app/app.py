@@ -21,9 +21,9 @@ generated_on = str(datetime.datetime.now())
 
 app = Flask(__name__)
 
-# db = redis.Redis('localhost') #connect to server
 #'tid-redis'
-db = redis.StrictRedis('localhost', 6379, charset="utf-8", decode_responses=True)
+# db = redis.StrictRedis('localhost', 6379, charset="utf-8", decode_responses=True)
+db = redis.StrictRedis('192.168.10.102', 6379, charset="utf-8", decode_responses=True)
 # db = redis.StrictRedis('tid-redis', 6379, charset="utf-8", decode_responses=True)
 
 def prettify(elem):
@@ -40,7 +40,7 @@ def before_request():
 
 @app.route('/')
 def api_root():
-	return 'Welcome to N4 printing Service version 1.0'
+	return 'Welcome to N4 printing Service version 1.3 -- Support swap container'
 
 
 @app.route('/truck/<truck_licence>', methods = ['GET'])
@@ -70,7 +70,7 @@ def container_damage(container,truck_licence,action):
 def print_document(document):
 	try:
 		xml = request.data
-		return_msg ,http_code		= make_printable_xml(xml)
+		return_msg ,http_code       = make_printable_xml(xml)
 	except Exception as e:
 		http_code = 500
 		return_msg ='HTTP_500_INTERNAL_SERVER_ERROR'
@@ -79,9 +79,10 @@ def print_document(document):
 
 def make_printable_xml(xml):
 	try:
+		print('Start process......')
 		generated_on = str(datetime.datetime.now())
 
-		json_data 	= {}
+		json_data   = {}
 
 		top = Element('print')
 		comment = Comment('Generated for N4 printing on %s' % generated_on)
@@ -91,60 +92,62 @@ def make_printable_xml(xml):
 		ns = {'argo': 'http://www.navis.com/argo'}
 		# Truck Visit
 		
-		json_data['document'] 		=   root.find('./argo:docDescription/docName',ns).text
-		json_data['printer'] 		=   root.find('./argo:docDescription/ipAddress',ns).text
+		json_data['document']       =   root.find('./argo:docDescription/docName',ns).text
+		json_data['printer']        =   root.find('./argo:docDescription/ipAddress',ns).text
 		
 
-		truck_visit_node 	=  	root.find('./argo:docBody/argo:truckVisit',ns)
-		license_number 		= 	truck_visit_node.find('tvdtlsLicNbr').text
-		truck_company_code	= 	truck_visit_node.find('tvdtlsTrkCompany').text
-		truck_company_name	= 	truck_visit_node.find('tvdtlsTrkCompanyName').text
-		truck_start 		= 	truck_visit_node.find('tvdtlsTrkStartTime').text
+		truck_visit_node    =   root.find('./argo:docBody/argo:truckVisit',ns)
+		license_number      =   truck_visit_node.find('tvdtlsLicNbr').text
+		truck_company_code  =   truck_visit_node.find('tvdtlsTrkCompany').text
+		truck_company_name  =   truck_visit_node.find('tvdtlsTrkCompanyName').text
+		truck_start         =   truck_visit_node.find('tvdtlsTrkStartTime').text
 		# Create XML for printing
-		truck_child 			= 	SubElement(top, 'truck')
-		license_child 			= 	SubElement(truck_child, 'license')
-		license_child.text 		=  	license_number
-		json_data['license'] 	=   license_number
+		truck_child             =   SubElement(top, 'truck')
+		license_child           =   SubElement(truck_child, 'license')
+		license_child.text      =   license_number
+		json_data['license']    =   license_number
 
-		company_child 			= 	SubElement(truck_child, 'company',{'code':truck_company_code})
-		company_child.text 		=  	truck_company_name
-		json_data['company_code'] 	=   truck_company_code
-		json_data['company'] 		=   truck_company_name
+		company_child           =   SubElement(truck_child, 'company',{'code':truck_company_code})
+		company_child.text      =   truck_company_name
+		json_data['company_code']   =   truck_company_code
+		json_data['company']        =   truck_company_name
 
-		start_child 			= 	SubElement(truck_child, 'start')
-		start_child.text 		=  	truck_start
-		json_data['start'] 		=   truck_start
+		start_child             =   SubElement(truck_child, 'start')
+		start_child.text        =   truck_start
+		json_data['start']      =   truck_start
 
 		# Truck Transaction
-		truck_trans_nodes 	=  root.findall('./argo:docBody/argo:trkTransaction',ns)
-		container 	=	''
-		iso 		= 	''
-		is_damage 	= 	False
-		position 	= 	''
-		state 		= 	''
-		category 	= 	''
-		seal1 		= 	''
-		seal2 		= 	''
+		truck_trans_nodes   =  root.findall('./argo:docBody/argo:trkTransaction',ns)
+		container   =   ''
+		iso         =   ''
+		is_damage   =   False
+		position    =   ''
+		state       =   ''
+		category    =   ''
+		seal1       =   ''
+		seal2       =   ''
 		
 
-		containers_child  = 	SubElement(top, 'containers')
+		containers_child  =     SubElement(top, 'containers')
 		containers = []
+
 		for t in truck_trans_nodes:
 			json_container ={}
 			# Make container for each container
-			container_child  = 	SubElement(containers_child, 'container')
+			container_child  =  SubElement(containers_child, 'container')
 
 			if t.find('tranCtrNbr',ns) != None:
 				container = t.find('tranCtrNbr',ns).text
 			else :
 				container = ''
-
 			# Case swap or change container
 			if t.find('tranCtrNbrAssigned',ns) != None:
-				container = t.find('tranCtrNbrAssigned',ns).text
+				if t.find('tranCtrNbrAssigned',ns).text != None:
+					container = t.find('tranCtrNbrAssigned',ns).text
 
-			child 			= 	SubElement(container_child, 'number')
-			child.text 		=  	container
+
+			child           =   SubElement(container_child, 'number')
+			child.text      =   container
 			json_container['number'] = container
 
 			# <tranSubType>DI</tranSubType>
@@ -156,8 +159,8 @@ def make_printable_xml(xml):
 			# Dray off  รับตู้
 
 			transtype = t.find('tranSubType',ns).text
-			child 			= 	SubElement(container_child, 'trans_type')
-			child.text 		=  	transtype
+			child           =   SubElement(container_child, 'trans_type')
+			child.text      =   transtype
 			json_container['trans_type'] = transtype
 
 
@@ -166,8 +169,8 @@ def make_printable_xml(xml):
 			else :
 				line = ''
 
-			child 			= 	SubElement(container_child, 'line')
-			child.text 		=  	line
+			child           =   SubElement(container_child, 'line')
+			child.text      =   line
 			json_container['line'] = line
 
 
@@ -179,25 +182,25 @@ def make_printable_xml(xml):
 		  # <tranEqoEqLength>NOM40</tranEqoEqLength>
 		  # <tranEqoEqHeight>NOM96</tranEqoEqHeight>
 			if t.find('tranEqoEqIsoGroup',ns) != None :
-				container_type 		= t.find('tranEqoEqIsoGroup',ns).text
+				container_type      = t.find('tranEqoEqIsoGroup',ns).text
 			else :
-				container_type		= 'DV' #default
+				container_type      = 'DV' #default
 
 			if t.find('tranEqoEqLength',ns) != None :
-				container_length 	= t.find('tranEqoEqLength',ns).text.replace('NOM','')
+				container_length    = t.find('tranEqoEqLength',ns).text.replace('NOM','')
 			else:
-				container_length 	= '40' #default
+				container_length    = '40' #default
 
 			if t.find('tranEqoEqHeight',ns) != None :
-				container_height 	= t.find('tranEqoEqHeight',ns).text.replace('NOM','')
+				container_height    = t.find('tranEqoEqHeight',ns).text.replace('NOM','')
 			else :
-				container_height	= '86' #default
+				container_height    = '86' #default
 
 
-			iso_text 			= '%s\' %s %s' % (container_length,int(container_height)/10,container_type)
+			iso_text            = '%s\' %s %s' % (container_length,int(container_height)/10,container_type)
 			# print (iso_text)
-			child 			= 	SubElement(container_child, 'iso',{'code':iso})
-			child.text 		=  	iso_text
+			child           =   SubElement(container_child, 'iso',{'code':iso})
+			child.text      =   iso_text
 			json_container['iso_text'] = iso_text
 			json_container['iso_code'] = iso
 			
@@ -207,27 +210,37 @@ def make_printable_xml(xml):
   #       <cvCvdCarrierVehicleName>NORTHERN MAJESTIC</cvCvdCarrierVehicleName>
   #       <cvCvdCarrierIbVygNbr>939E</cvCvdCarrierIbVygNbr>
   #       <cvCvdCarrierObVygNbr>946W</cvCvdCarrierObVygNbr>
-  #     	</argo:tranCarrierVisit>
-			vessel_code 	= t.find('argo:tranCarrierVisit/cvId',ns).text.split('_')[0]
-			vessel_name 	= t.find('argo:tranCarrierVisit/cvCvdCarrierVehicleName',ns).text
-			voy_in	 		= t.find('argo:tranCarrierVisit/cvCvdCarrierIbVygNbr',ns).text
-			voy_out	 		= t.find('argo:tranCarrierVisit/cvCvdCarrierObVygNbr',ns).text
-			vessel_child 	= 	SubElement(container_child, 'vessel')
-			child 			= 	SubElement(vessel_child, 'code')
-			child.text 		=  	vessel_code
-			child 			= 	SubElement(vessel_child, 'name')
-			child.text 		=  	vessel_name
-			child 			= 	SubElement(vessel_child, 'voy_in')
-			child.text 		=  	voy_in
-			child 			= 	SubElement(vessel_child, 'voy_out')
-			child.text 		=  	voy_out
-			child 			= 	SubElement(vessel_child, 'full_name')
-			child.text 		=  	'%s/%s %s' % (vessel_code,voy_out,vessel_name)
+  #         </argo:tranCarrierVisit>
+			print('Start - Check Vessel info')
+			if t.find('argo:tranCarrierVisit',ns) != None :
+				vessel_code     = t.find('argo:tranCarrierVisit/cvId',ns).text.split('_')[0]
+				vessel_name     = t.find('argo:tranCarrierVisit/cvCvdCarrierVehicleName',ns).text
+				voy_in          = t.find('argo:tranCarrierVisit/cvCvdCarrierIbVygNbr',ns).text
+				voy_out         = t.find('argo:tranCarrierVisit/cvCvdCarrierObVygNbr',ns).text
+			else :
+				vessel_code     = ''
+				vessel_name     = ''
+				voy_in          = ''
+				voy_out         = ''
+			print('End - Check Vessel info')
 
-			json_container['vessel_code'] 	= vessel_code
-			json_container['vessel_name'] 	= vessel_name
-			json_container['voy_in'] 		= voy_in
-			json_container['voy_out'] 		= voy_out
+
+			vessel_child    =   SubElement(container_child, 'vessel')
+			child           =   SubElement(vessel_child, 'code')
+			child.text      =   vessel_code
+			child           =   SubElement(vessel_child, 'name')
+			child.text      =   vessel_name
+			child           =   SubElement(vessel_child, 'voy_in')
+			child.text      =   voy_in
+			child           =   SubElement(vessel_child, 'voy_out')
+			child.text      =   voy_out
+			child           =   SubElement(vessel_child, 'full_name')
+			child.text      =   '%s/%s %s' % (vessel_code,voy_out,vessel_name)
+
+			json_container['vessel_code']   = vessel_code
+			json_container['vessel_name']   = vessel_name
+			json_container['voy_in']        = voy_in
+			json_container['voy_out']       = voy_out
 
 			# <tranCtrFreightKind>FCL</tranCtrFreightKind>
 			if t.find('tranCtrFreightKind',ns) != None:
@@ -235,80 +248,80 @@ def make_printable_xml(xml):
 			else :
 				freightkind = ''
 
-			child 			= 	SubElement(container_child, 'freightkind')
-			child.text 		=  	freightkind
-			json_container['freightkind'] 		= freightkind
+			child           =   SubElement(container_child, 'freightkind')
+			child.text      =   freightkind
+			json_container['freightkind']       = freightkind
 
 			# <argo:tranDischargePoint1>
-   #      	<pointId>SGSIN</pointId>
+   #        <pointId>SGSIN</pointId>
 			if t.find('argo:tranDischargePoint1/pointId',ns) != None:
 				pod = t.find('argo:tranDischargePoint1/pointId',ns).text
 			else :
 				pod = ''
 
-			child 			= 	SubElement(container_child, 'pod')
-			child.text 		=  	pod
-			json_container['pod'] 		= pod
+			child           =   SubElement(container_child, 'pod')
+			child.text      =   pod
+			json_container['pod']       = pod
 
 			# <tranCtrGrossWeight>10000.0</tranCtrGrossWeight>
 			if t.find('tranCtrGrossWeight',ns) != None:
 				gross = t.find('tranCtrGrossWeight',ns).text
 			else :
-				gross = 	''
+				gross =     ''
 
 
-			child 			= 	SubElement(container_child, 'gross_weight')
-			child.text 		=  	gross
-			json_container['gross_weight'] 		= gross
+			child           =   SubElement(container_child, 'gross_weight')
+			child.text      =   gross
+			json_container['gross_weight']      = gross
 
 			# <tranCreated>Nov 6, 2019 4:09 PM</tranCreated>
 			  # <tranCreator>gab2295</tranCreator>
 			  # <tranChanged>Nov 6, 2019 4:09 PM</tranChanged>
 			  # <tranChanger>gab2295</tranChanger>
-			created_date	= t.find('tranCreated',ns).text
-			created_user 	= t.find('tranCreator',ns).text
-			changed_date 	= t.find('tranChanged',ns).text
-			changed_user 	= t.find('tranChanger',ns).text
+			created_date    = t.find('tranCreated',ns).text
+			created_user    = t.find('tranCreator',ns).text
+			changed_date    = t.find('tranChanged',ns).text
+			changed_user    = t.find('tranChanger',ns).text
 			
-			child 			= 	SubElement(container_child, 'created')
-			child.text 		=  	created_date
-			child 			= 	SubElement(container_child, 'creator')
-			child.text 		=  	created_user
-			child 			= 	SubElement(container_child, 'changed')
-			child.text 		=  	changed_date
-			child 			= 	SubElement(container_child, 'changer')
-			child.text 		=  	changed_user
-			json_container['created'] 		= created_date
-			json_container['creator'] 		= created_user
-			json_container['changed'] 		= changed_date
-			json_container['changer'] 		= changed_user
+			child           =   SubElement(container_child, 'created')
+			child.text      =   created_date
+			child           =   SubElement(container_child, 'creator')
+			child.text      =   created_user
+			child           =   SubElement(container_child, 'changed')
+			child.text      =   changed_date
+			child           =   SubElement(container_child, 'changer')
+			child.text      =   changed_user
+			json_container['created']       = created_date
+			json_container['creator']       = created_user
+			json_container['changed']       = changed_date
+			json_container['changer']       = changed_user
 			
 
 
 			if t.find('tranCtrIsDamaged',ns) != None:
 				is_damage = True if t.find('tranCtrIsDamaged',ns).text == 'true' else False
 
-			child 			= 	SubElement(container_child, 'damage')
-			child.text 		=  	str(is_damage)
+			child           =   SubElement(container_child, 'damage')
+			child.text      =   str(is_damage)
 
 
 			# argo:tranCtrPosition/posLocId -->Old
 			# tranFlexString02
 			if t.find('tranFlexString02',ns) != None :
 				position = t.find('tranFlexString02',ns).text
-			new_position	= 	'%s-%s' % (position[:3],position[3:5])
-			child 			= 	SubElement(container_child, 'position')
-			child.text 		=  	new_position
-			json_container['position'] 		= new_position
+			new_position    =   '%s-%s' % (position[:3],position[3:5])
+			child           =   SubElement(container_child, 'position')
+			child.text      =   new_position
+			json_container['position']      = new_position
 
 			if t.find('argo:tranCtrDmg/dmgitemTypeDescription',ns) != None :
 				damage = t.find('argo:tranCtrDmg/dmgitemTypeDescription',ns).text
 			else :
 				damage = ''
 			
-			child 			= 	SubElement(container_child, 'damage')
-			child.text 		=  	damage
-			json_container['damage'] 		= damage
+			child           =   SubElement(container_child, 'damage')
+			child.text      =   damage
+			json_container['damage']        = damage
 
 			# UnitCategoryEnum[STRGE]
 			# UnitCategoryEnum[EXPRT]
@@ -316,40 +329,54 @@ def make_printable_xml(xml):
 			if t.find('tranUnitCategory',ns) != None:
 				category = t.find('tranUnitCategory',ns).text
 
-			child 			= 	SubElement(container_child, 'category')
-			child.text 		=  	category.replace('UnitCategoryEnum','')
-			json_container['category'] 		= category.replace('UnitCategoryEnum','')
+			child           =   SubElement(container_child, 'category')
+			child.text      =   category.replace('UnitCategoryEnum','')
+			json_container['category']      = category.replace('UnitCategoryEnum','')
 
 			if t.find('tranSealNbr1',ns) != None :
 				seal1 = t.find('tranSealNbr1',ns).text
 			else :
 				seal1 =''
 
-			child 			= 	SubElement(container_child, 'seal1')
-			child.text 		=  	seal1
-			json_container['seal1'] 		= seal1
+			child           =   SubElement(container_child, 'seal1')
+			child.text      =   seal1
+			json_container['seal1']         = seal1
 
 			if t.find('tranSealNbr2',ns) != None :
 				seal2 = t.find('tranSealNbr2',ns).text
 			else :
 				seal2 = ''
 
-			child 			= 	SubElement(container_child, 'seal2')
-			child.text 		=  	seal2
-			json_container['seal2'] 		= seal2
+			child           =   SubElement(container_child, 'seal2')
+			child.text      =   seal2
+			json_container['seal2']         = seal2
 
 			# <tranUnitFlexString01>B1</tranUnitFlexString01>
 			if t.find('tranUnitFlexString01',ns) != None:
 				terminal = t.find('tranUnitFlexString01',ns).text
 			else :
 				terminal = ''
-			json_container['terminal'] 		= terminal
+			json_container['terminal']      = terminal
 
 			if t.find('tranTempRequired',ns) != None:
 				temperature = t.find('tranTempRequired',ns).text
 			else :
 				temperature = ''
-			json_container['temperature'] 		= temperature
+			json_container['temperature']       = temperature
+
+			# Add DG data
+
+			if t.find('argo:tranHazard/hzrdiImdgCode',ns) != None:
+				imdg = t.find('argo:tranHazard/hzrdiImdgCode',ns).text
+			else :
+				imdg = ''
+
+			if t.find('argo:tranHazard/hzrdiUNnum',ns) != None:
+				un = t.find('argo:tranHazard/hzrdiUNnum',ns).text
+			else :
+				un = ''
+
+			json_container['dg']       = '%s/%s' % (imdg,un)
 			
 			containers.append(json_container)
 
@@ -395,6 +422,7 @@ def make_printable_xml(xml):
 		app.logger.error('%s - %s' % (license_number,e))
 		return '%s' % e,500
 	
+
 
 
 	
