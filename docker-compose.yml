@@ -22,6 +22,18 @@ services:
       - REDIS_URL=redis://tid-redis:6379/0
     ports:
       - 8013:5000
+  
+  ticket-server:
+    build:
+      context: ./app
+    command: python ticket.py
+    container_name: tiket-server
+    depends_on:
+      - tid-redis
+    environment:
+      - REDIS_URL=redis://tid-redis:6379/0
+    ports:
+      - 8014:5000
 
 volumes:  
   redis_data:
